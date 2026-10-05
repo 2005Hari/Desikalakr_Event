@@ -1,5 +1,71 @@
 import * as XLSX from "xlsx";
 
+// ---- Form builder -------------------------------------------------------
+
+const FIELD_TYPES = ["text", "textarea", "number", "email", "phone", "date", "dropdown", "radio", "checkbox"];
+const CHOICE_TYPES = ["dropdown", "radio"];
+const fail = (msg) => { throw Object.assign(new Error(msg), { code: 400 }); };
+
+export function sanitizeFormFields(fields) {
+  if (!Array.isArray(fields) || !fields.length) fail("Add at least one field");
+  if (fields.length > 40) fail("Too many fields (max 40)");
+  const seen = new Set();
+  return fields.map((f, i) => {
+    const type = String(f.type || "").trim();
+    if (!FIELD_TYPES.includes(type)) fail(`Field ${i + 1}: invalid type "${type}"`);
+    const label = String(f.label || "").trim().slice(0, 200);
+    if (!label) fail(`Field ${i + 1}: label required`);
+    const id = String(f.id || "").trim();
+    if (!/^[\w-]{1,40}$/.test(id)) fail(`Field ${i + 1} ("${label}"): invalid field id`);
+    if (seen.has(id)) fail(`Field ${i + 1} ("${label}"): duplicate field id`);
+    seen.add(id);
+    let options;
+    if (type === "dropdown" || type === "radio" || type === "checkbox") {
+      options = (Array.isArray(f.options) ? f.options : []).map((o) => String(o).trim().slice(0, 200)).filter(Boolean).slice(0, 30);
+      if (CHOICE_TYPES.includes(type) && !options.length) fail(`Field ${i + 1} ("${label}"): needs at least one option`);
+    }
+    return { id, type, label, required: !!f.required, ...(options?.length ? { options } : {}) };
+  });
+}
+
+// Validates submitted answers against a form's fields and returns a clean
+// answers object keyed the same way — unknown keys in the submission are
+// dropped, so a form can only ever record what it was built to ask for.
+export function validateAnswers(fields, answers) {
+  const out = {};
+  for (const f of fields) {
+    const raw = answers?.[f.id];
+    if (f.type === "checkbox" && f.options) {
+      const arr = Array.isArray(raw) ? raw.filter((v) => f.options.includes(v)) : [];
+      if (f.required && !arr.length) fail(`"${f.label}" is required`);
+      out[f.id] = arr;
+    } else if (f.type === "checkbox") {
+      const v = !!raw;
+      if (f.required && !v) fail(`"${f.label}" is required`);
+      out[f.id] = v;
+    } else if (CHOICE_TYPES.includes(f.type)) {
+      const v = String(raw ?? "").trim();
+      if (f.required && !v) fail(`"${f.label}" is required`);
+      if (v && !f.options.includes(v)) fail(`"${f.label}": invalid option`);
+      out[f.id] = v;
+    } else if (f.type === "number") {
+      if (raw === "" || raw === null || raw === undefined) {
+        if (f.required) fail(`"${f.label}" is required`);
+        out[f.id] = null;
+      } else {
+        const n = Number(raw);
+        if (!Number.isFinite(n)) fail(`"${f.label}" must be a number`);
+        out[f.id] = n;
+      }
+    } else {
+      const v = String(raw ?? "").trim().slice(0, 2000);
+      if (f.required && !v) fail(`"${f.label}" is required`);
+      out[f.id] = v;
+    }
+  }
+  return out;
+}
+
 export function flattenParticipants(registrations) {
   const out = [];
   registrations.forEach((reg) => {

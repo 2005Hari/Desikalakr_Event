@@ -1,11 +1,13 @@
 import { api, proofHref } from "./api.js";
+import { downloadCSV } from "./csv.js";
 import AdminPage from "./AdminPage.jsx";
+import FormsPage from "./FormsPage.jsx";
 import React, { useState, useEffect, useMemo, useRef, useContext, createContext } from "react";
 import {
   Home, Users, Ticket, Palette, Wallet, AlertTriangle, BarChart3, Settings as SettingsIcon,
   Search, CheckCircle2, XCircle, Clock, Phone, Mail, GraduationCap, Package, ChevronRight,
   Download, RefreshCw, X, AlertCircle, TrendingUp, PieChart as PieChartIcon, Loader2,
-  ShieldCheck, ShieldAlert, ShieldQuestion, ArrowLeft, Sparkles, UserPlus, Plus
+  ShieldCheck, ShieldAlert, ShieldQuestion, ArrowLeft, Sparkles, UserPlus, Plus, ClipboardList
 } from "lucide-react";
 
 // Flatten a list of registrations into individual participants, each carrying a
@@ -100,26 +102,6 @@ function fmtDateTime(iso) {
 
 function cx(...args) {
   return args.filter(Boolean).join(" ");
-}
-
-function downloadCSV(filename, rows) {
-  if (!rows || !rows.length) return;
-  const headers = Object.keys(rows[0]);
-  const esc = (v) => {
-    if (v === null || v === undefined) return "";
-    const s = String(v).replace(/"/g, '""');
-    return /[",\n]/.test(s) ? `"${s}"` : s;
-  };
-  const csv = [headers.join(","), ...rows.map((r) => headers.map((h) => esc(r[h])).join(","))].join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
 }
 
 // ---------- Issue detection (computed from whatever registration/participant lists are passed in) ----------
@@ -483,6 +465,7 @@ const NAV_ITEMS = [
   { id: "payments", label: "Payments", icon: Wallet },
   { id: "issues", label: "Issues", icon: AlertTriangle },
   { id: "reports", label: "Reports", icon: BarChart3 },
+  { id: "forms", label: "Forms", icon: ClipboardList, adminOnly: true },
   { id: "settings", label: "Settings", icon: SettingsIcon },
   { id: "admin", label: "Event Admin", icon: ShieldCheck, adminOnly: true },
 ];
@@ -1857,6 +1840,7 @@ export function EventApp({ slug, onSwitch, onLogout }) {
           {page === "reports" && <ReportsPage stats={stats} state={state} allIssues={allIssues} />}
           {page === "settings" && <SettingsPage onReset={onReset} syncOk={syncOk} stats={stats} isAdmin={isAdmin} />}
           {page === "admin" && isAdmin && <AdminPage slug={slug} config={snap.config} onChanged={refresh} showToast={showToast} />}
+          {page === "forms" && isAdmin && <FormsPage slug={slug} showToast={showToast} />}
           {page === "ocpanel" && <OCPanelPage stats={stats} allIssues={allIssues} state={state} setPage={setPage} />}
         </div>
         <MobileNav page={page} setPage={setPage} items={navItems} />

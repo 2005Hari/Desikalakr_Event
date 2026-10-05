@@ -2,8 +2,13 @@ import React, { useEffect, useState } from "react";
 import { api, getToken, setToken } from "./api.js";
 import { EventApp, GlobalStyles } from "./desi-kalakar-dashboard.jsx";
 import { KitEditor, cleanKits } from "./AdminPage.jsx";
+import PublicForm from "./PublicForm.jsx";
 
 const slugFromHash = () => (window.location.hash.match(/^#\/e\/([a-z0-9-]+)/) || [])[1] || null;
+const publicFormFromHash = () => {
+  const m = window.location.hash.match(/^#\/form\/([a-z0-9-]+)\/([\w-]+)/);
+  return m ? { slug: m[1], formId: m[2] } : null;
+};
 
 function Shell({ children, wide }) {
   return (
@@ -103,6 +108,7 @@ export default function Root() {
   const [session, setSession] = useState(null);
   const [booting, setBooting] = useState(!!getToken());
   const [slug, setSlug] = useState(slugFromHash());
+  const [publicForm, setPublicForm] = useState(publicFormFromHash());
 
   const reload = async () => {
     const me = await api("GET", "/me");
@@ -111,12 +117,13 @@ export default function Root() {
   };
 
   useEffect(() => {
-    if (!getToken()) return;
+    if (publicForm || !getToken()) return;
     reload().catch(() => setToken(null)).finally(() => setBooting(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    const onHash = () => setSlug(slugFromHash());
+    const onHash = () => { setSlug(slugFromHash()); setPublicForm(publicFormFromHash()); };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
@@ -124,6 +131,8 @@ export default function Root() {
   const pick = (s) => { window.location.hash = s ? `#/e/${s}` : ""; setSlug(s); };
   const logout = () => { setToken(null); setSession(null); pick(null); };
 
+  // Public form links need no login at all — check this before anything session-related.
+  if (publicForm) return <PublicForm slug={publicForm.slug} formId={publicForm.formId} />;
   if (booting) return null;
   if (!session) return <Login onDone={setSession} />;
   if (!slug) return <EventPicker session={session} onPick={pick} onLogout={logout} onReload={reload} />;

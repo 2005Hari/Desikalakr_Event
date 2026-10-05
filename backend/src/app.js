@@ -4,7 +4,7 @@ import multer from "multer";
 import jwt from "jsonwebtoken";
 import crypto from "node:crypto";
 import { SLUG_RE } from "./store.js";
-import { flattenParticipants, computeIssues, buildWalkInRegistration, parseRegistrationSheet } from "./domain.js";
+import { flattenParticipants, computeIssues, buildWalkInRegistration, parseRegistrationSheet, sanitizeFormFields, validateAnswers } from "./domain.js";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -142,6 +142,73 @@ export function createApp({ store, identity, jwtSecret, creatorGroup = "event-cr
     await identity.removeFromGroup(username, volunteersGroup(slug));
     dropGroups(username);
     res.status(204).end();
+  }));
+
+  // ---- forms (admin) ----
+  app.post("/api/events/:slug/forms", auth, eventAccess("admin"), wrap(async (req, res) => {
+    const { title, description = "" } = req.body || {};
+    if (!title?.trim()) throw httpErr(400, "Title required");
+    const fields = sanitizeFormFields(req.body?.fields);
+    const form = await store.createForm(req.params.slug, {
+      title: title.trim(), description: String(description).slice(0, 2000), fields, status: "open", createdBy: req.user,
+    });
+    res.status(201).json(form);
+  }));
+
+  app.get("/api/events/:slug/forms", auth, eventAccess("admin"), wrap(async (req, res) => {
+    res.json(await store.listForms(req.params.slug));
+  }));
+
+  app.get("/api/events/:slug/forms/:formId", auth, eventAccess("admin"), wrap(async (req, res) => {
+    const form = await store.getForm(req.params.slug, req.params.formId);
+    if (!form) throw httpErr(404, "Form not found");
+    res.json(form);
+  }));
+
+  app.put("/api/events/:slug/forms/:formId", auth, eventAccess("admin"), wrap(async (req, res) => {
+    const patch = { updatedAt: new Date().toISOString() };
+    if (req.body?.title !== undefined) {
+      if (!req.body.title.trim()) throw httpErr(400, "Title required");
+      patch.title = req.body.title.trim();
+    }
+    if (req.body?.description !== undefined) patch.description = String(req.body.description).slice(0, 2000);
+    if (req.body?.fields !== undefined) patch.fields = sanitizeFormFields(req.body.fields);
+    if (req.body?.status !== undefined) {
+      if (!["open", "closed"].includes(req.body.status)) throw httpErr(400, "Invalid status");
+      patch.status = req.body.status;
+    }
+    const next = await store.updateForm(req.params.slug, req.params.formId, patch);
+    if (!next) throw httpErr(404, "Form not found");
+    res.json(next);
+  }));
+
+  app.get("/api/events/:slug/forms/:formId/submissions", auth, eventAccess("admin"), wrap(async (req, res) => {
+    const form = await store.getForm(req.params.slug, req.params.formId);
+    if (!form) throw httpErr(404, "Form not found");
+    res.json({ form, submissions: await store.listSubmissions(req.params.slug, req.params.formId) });
+  }));
+
+  // ---- forms (public — no login; students fill these out from a shared link) ----
+  app.get("/api/public/forms/:slug/:formId", wrap(async (req, res) => {
+    const { slug, formId } = req.params;
+    if (!SLUG_RE.test(slug)) throw httpErr(404, "Not found");
+    const config = await store.getConfig(slug);
+    const form = config && (await store.getForm(slug, formId));
+    if (!form) throw httpErr(404, "Not found");
+    res.json({ eventName: config.name, id: form.id, title: form.title, description: form.description, status: form.status, fields: form.fields });
+  }));
+
+  app.post("/api/public/forms/:slug/:formId/submit", wrap(async (req, res) => {
+    const { slug, formId } = req.params;
+    if (!SLUG_RE.test(slug)) throw httpErr(404, "Not found");
+    const config = await store.getConfig(slug);
+    const form = config && (await store.getForm(slug, formId));
+    if (!form) throw httpErr(404, "Not found");
+    if (form.status !== "open") throw httpErr(409, "This form is no longer accepting responses");
+    const answers = validateAnswers(form.fields, req.body?.answers || {});
+    const submission = { id: `sub_${crypto.randomBytes(8).toString("hex")}`, formId, submittedAt: new Date().toISOString(), answers };
+    await store.addSubmission(slug, formId, submission);
+    res.status(201).json({ ok: true });
   }));
 
   // ---- data ----

@@ -1,3 +1,5 @@
+import crypto from "node:crypto";
+
 const MAX_RETRIES = 6;
 const CACHE_TTL_MS = 30_000;
 
@@ -147,6 +149,50 @@ export function createStore(storage) {
 
     async getProof(slug, rel) {
       return storage.getBinary(`${evDir(slug)}/uploads/${rel}`);
+    },
+
+    async createForm(slug, form) {
+      const id = `frm_${crypto.randomBytes(8).toString("hex")}`;
+      const def = { id, createdAt: new Date().toISOString(), ...form };
+      await storage.mkdirp(`${evDir(slug)}/forms/${id}/submissions`);
+      await storage.putJson(`${evDir(slug)}/forms/${id}/definition.json`, def, { ifNoneMatch: "*" });
+      invalidate(`forms:${slug}`);
+      return def;
+    },
+
+    async listForms(slug) {
+      return cached(`forms:${slug}`, async () => {
+        const names = await storage.list(`${evDir(slug)}/forms`);
+        const defs = await pool(names, 10, (n) => this.getForm(slug, n));
+        return defs.filter(Boolean).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+      });
+    },
+
+    async getForm(slug, formId) {
+      if (!/^[\w-]{1,60}$/.test(formId)) return null;
+      return (await storage.getJson(`${evDir(slug)}/forms/${formId}/definition.json`))?.data || null;
+    },
+
+    async updateForm(slug, formId, patch) {
+      const path = `${evDir(slug)}/forms/${formId}/definition.json`;
+      const cur = await storage.getJson(path);
+      if (!cur) return null;
+      const next = await rmw(path, (d) => ({ ...d, ...patch }), cur.data);
+      invalidate(`forms:${slug}`);
+      return next;
+    },
+
+    async listSubmissions(slug, formId) {
+      return cached(`subs:${slug}:${formId}`, async () => {
+        const names = (await storage.list(`${evDir(slug)}/forms/${formId}/submissions`)).filter((n) => n.endsWith(".json"));
+        const subs = await pool(names, 10, async (n) => (await storage.getJson(`${evDir(slug)}/forms/${formId}/submissions/${n}`))?.data);
+        return subs.filter(Boolean).sort((a, b) => String(a.submittedAt).localeCompare(String(b.submittedAt)));
+      });
+    },
+
+    async addSubmission(slug, formId, submission) {
+      await storage.putJson(`${evDir(slug)}/forms/${formId}/submissions/${submission.id}.json`, submission, { ifNoneMatch: "*" });
+      invalidate(`subs:${slug}:${formId}`);
     },
   };
 }

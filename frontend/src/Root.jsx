@@ -35,13 +35,30 @@ function Login({ onDone }) {
   };
   return (
     <Shell>
-      <div className="dk-display" style={{ fontSize: 24, fontWeight: 600 }}>Event Control Room</div>
-      <div style={{ fontSize: 13, color: "var(--ink-soft)", margin: "4px 0 18px" }}>Sign in with your Nextcloud account.</div>
-      <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        <input className="dk-input" placeholder="Username" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} />
-        <input className="dk-input" type="password" placeholder="Password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
-        {err ? <div style={{ color: "var(--danger)", fontSize: 13 }}>{err}</div> : null}
-        <button className="dk-btn dk-btn-primary" disabled={busy || !username || !password} style={{ padding: "10px 16px" }}>{busy ? "Signing in…" : "Sign in"}</button>
+      <div style={{ textAlign: "center", marginBottom: 24 }}>
+        <div style={{ 
+          width: 56, height: 56, borderRadius: 16, background: "var(--marigold-soft)", 
+          display: "flex", alignItems: "center", justifyContent: "center", 
+          margin: "0 auto 16px", color: "var(--marigold)", fontSize: 24
+        }}>
+          ✨
+        </div>
+        <div className="dk-display" style={{ fontSize: 28, fontWeight: 700, letterSpacing: "-0.01em" }}>Control Room</div>
+        <div style={{ fontSize: 14, color: "var(--ink-soft)", marginTop: 6 }}>Sign in with your Nextcloud account</div>
+      </div>
+      <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div>
+          <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--ink-soft)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.02em" }}>Username</label>
+          <input className="dk-input" style={{ width: "100%", padding: "12px 16px", fontSize: 15 }} placeholder="Enter username" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} />
+        </div>
+        <div>
+          <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--ink-soft)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.02em" }}>Password</label>
+          <input className="dk-input" style={{ width: "100%", padding: "12px 16px", fontSize: 15 }} type="password" placeholder="Enter password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        </div>
+        {err ? <div style={{ color: "var(--danger)", fontSize: 13, background: "var(--danger-soft)", padding: "8px 12px", borderRadius: 8, fontWeight: 500 }}>{err}</div> : null}
+        <button className="dk-btn dk-btn-primary" disabled={busy || !username || !password} style={{ padding: "14px 16px", fontSize: 15, marginTop: 4 }}>
+          {busy ? "Authenticating…" : "Sign In →"}
+        </button>
       </form>
     </Shell>
   );
